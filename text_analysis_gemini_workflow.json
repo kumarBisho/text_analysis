@@ -1,0 +1,149 @@
+{
+  "name": "Text Analysis (Gemini + Webhook + Stable Output)",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook - Text Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "parameters": {
+        "path": "text-analysis",
+        "responseMode": "onReceived"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Set - Flatten Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [420, 300],
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "text",
+              "value": "={{$json[\"body\"][\"text\"]}}"
+            },
+            {
+              "name": "mode",
+              "value": "={{$json[\"body\"][\"mode\"]}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3",
+      "name": "Switch - Mode",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [640, 300],
+      "parameters": {
+        "propertyName": "mode",
+        "rules": [
+          { "operation": "equal", "value": "summary" },
+          { "operation": "equal", "value": "sentiment" }
+        ]
+      }
+    },
+    {
+      "id": "4",
+      "name": "Set - Summary Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [860, 180],
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "prompt",
+              "value": "={{'Summarize the following text in 2-3 sentences:\\n' + $json[\"text\"]}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5",
+      "name": "Set - Sentiment Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [860, 420],
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "prompt",
+              "value": "={{'Analyze the sentiment (Positive, Neutral, or Negative) of the following text:\\n' + $json[\"text\"]}}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6",
+      "name": "Gemini - Summary",
+      "type": "n8n-nodes-base.googleVertexAi",
+      "typeVersion": 2,
+      "position": [1100, 180],
+      "parameters": {
+        "resource": "text",
+        "operation": "messageModel",
+        "model": "models/gemini-pro",
+        "messages": [
+          { "role": "user", "content": "={{$json[\"prompt\"]}}" }
+        ],
+        "simplifyOutput": true,
+        "outputContentAsJson": true
+      },
+      "credentials": { "googleVertexApi": { "id": "YOUR_GEMINI_CREDENTIAL_ID" } }
+    },
+    {
+      "id": "7",
+      "name": "Gemini - Sentiment",
+      "type": "n8n-nodes-base.googleVertexAi",
+      "typeVersion": 2,
+      "position": [1100, 420],
+      "parameters": {
+        "resource": "text",
+        "operation": "messageModel",
+        "model": "models/gemini-pro",
+        "messages": [
+          { "role": "user", "content": "={{$json[\"prompt\"]}}" }
+        ],
+        "simplifyOutput": true,
+        "outputContentAsJson": true
+      },
+      "credentials": { "googleVertexApi": { "id": "YOUR_GEMINI_CREDENTIAL_ID" } }
+    },
+    {
+      "id": "8",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "parameters": {
+        "responseMode": "onReceived",
+        "responseData": "={{ {\n  \"result\": (\n    $json[\"content\"]\n    || $json[\"data\"]?.[0]?.[\"content\"]?.[\"parts\"]?.[0]?.[\"text\"]\n    || $json[\"candidates\"]?.[0]?.[\"content\"]?.[\"parts\"]?.[0]?.[\"text\"]\n    || \"No response generated\"\n  ).toString(),\n  \"mode\": $node[\"Set - Flatten Input\"].json[\"mode\"],\n  \"inputText\": $node[\"Set - Flatten Input\"].json[\"text\"],\n  \"model\": \"gemini-pro\"\n} }}"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook - Text Input": { "main": [[{ "node": "Set - Flatten Input", "type": "main", "index": 0 }]] },
+    "Set - Flatten Input": { "main": [[{ "node": "Switch - Mode", "type": "main", "index": 0 }]] },
+    "Switch - Mode": {
+      "main": [
+        [{ "node": "Set - Summary Prompt", "type": "main", "index": 0 }],
+        [{ "node": "Set - Sentiment Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set - Summary Prompt": { "main": [[{ "node": "Gemini - Summary", "type": "main", "index": 0 }]] },
+    "Set - Sentiment Prompt": { "main": [[{ "node": "Gemini - Sentiment", "type": "main", "index": 0 }]] },
+    "Gemini - Summary": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] },
+    "Gemini - Sentiment": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  }
+}
